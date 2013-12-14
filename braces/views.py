@@ -287,6 +287,44 @@ class GroupRequiredMixin(AccessMixin):
             request, *args, **kwargs)
 
 
+class ObjectOwnerRequiredMixin(AccessMixin):
+    """
+    Requires that the currently logged in user is the owner of the
+    object being accessed.
+
+    """
+
+    owner_field_name = None
+
+    def dispatch(self, request, *args, **kwargs):
+        if not hasattr(self, 'get_object'):
+            raise ImproperlyConfigured("'ObjectOwnerRequiredMixin' "
+                                       "requires the 'get_object' method to "
+                                       "be implemented on self.")
+
+        obj = self.get_object()
+
+        if not self.is_owner(request.user, obj):
+            return self.handle_no_permission(request)
+
+        return super(AccessMixin, self).dispatch(request, *args, **kwargs)
+
+    def is_owner(self, user, obj):
+        if self.owner_field_name is None:
+            raise ImproperlyConfigured("'ObjectOwnerRequiredMixin' "
+                                       "requires 'owner_field_name' "
+                                       "attribute to be set.")
+        return user == getattr(obj, self.owner_field_name, None)
+
+    def handle_no_permission(self, request):
+        if self.raise_exception:  # if an exception was desired
+            raise PermissionDenied  # return a forbidden response.
+        else:
+            return redirect_to_login(request.get_full_path(),
+                                     self.get_login_url(),
+                                     self.get_redirect_field_name())
+
+
 class UserFormKwargsMixin(object):
     """
     CBV mixin which puts the user from the request into the form kwargs.
