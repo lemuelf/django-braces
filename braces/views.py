@@ -26,7 +26,7 @@ class AccessMixin(object):
     'Abstract' mixin that gives access mixins the same customizable
     functionality.
     """
-    login_url = settings.LOGIN_URL  # LOGIN_URL from project settings
+    login_url = None
     raise_exception = False  # Default whether to raise an exception to none
     redirect_field_name = REDIRECT_FIELD_NAME  # Set by django.contrib.auth
 
@@ -34,13 +34,13 @@ class AccessMixin(object):
         """
         Override this method to customize the login_url.
         """
-        if self.login_url is None:
+        login_url = self.login_url or settings.LOGIN_URL
+        if not login_url:
             raise ImproperlyConfigured(
-                "%(cls)s is missing the login_url. "
-                "Define %(cls)s.login_url or override "
+                "Define %(cls)s.login_url or settings.LOGIN_URL or override "
                 "%(cls)s.get_login_url()." % {"cls": self.__class__.__name__})
 
-        return force_text(self.login_url)
+        return force_text(login_url)
 
     def get_redirect_field_name(self):
         """
@@ -267,13 +267,13 @@ class GroupRequiredMixin(AccessMixin):
 
     def check_membership(self, group):
         """ Check required group(s) """
-        if not group in self.request.user.groups.values_list('name',
-                                                             flat=True):
-            return False
-        return True
+        return group in self.request.user.groups.values_list("name", flat=True)
 
     def dispatch(self, request, *args, **kwargs):
-        in_group = self.check_membership(self.get_group_required())
+        self.request = request
+        in_group = False
+        if self.request.user.is_authenticated():
+            in_group = self.check_membership(self.get_group_required())
 
         if not in_group:
             if self.raise_exception:
@@ -323,6 +323,42 @@ class ObjectOwnerRequiredMixin(AccessMixin):
             return redirect_to_login(request.get_full_path(),
                                      self.get_login_url(),
                                      self.get_redirect_field_name())
+
+
+class UserPassesTestMixin(AccessMixin):
+    """
+    CBV Mixin allows you to define test that every user should pass
+    to get access into view.
+
+    Class Settings
+        `test_func` - This is required to be a method that takes user
+            instance and return True or False after checking conditions.
+        `login_url` - the login url of site
+        `redirect_field_name` - defaults to "next"
+        `raise_exception` - defaults to False - raise 403 if set to True
+    """
+
+    def test_func(self, user):
+        raise NotImplementedError(
+                "%(cls)s is missing implementation of the "
+                "test_func method. You should write one." % {
+                        "cls": self.__class__.__name__})
+
+    def get_test_func(self):
+        return getattr(self, "test_func")
+
+    def dispatch(self, request, *args, **kwargs):
+        user_test_result = self.get_test_func()(request.user)
+
+        if not user_test_result:  # If user don't pass the test
+            if self.raise_exception:  # *and* if an exception was desired
+                raise PermissionDenied
+            else:
+                return redirect_to_login(request.get_full_path(),
+                                         self.get_login_url(),
+                                         self.get_redirect_field_name())
+        return super(UserPassesTestMixin, self).dispatch(
+            request, *args, **kwargs)
 
 
 class UserFormKwargsMixin(object):
@@ -506,7 +542,8 @@ class JSONResponseMixin(object):
         or other complex or custom objects.
         """
         json_context = json.dumps(context_dict, cls=DjangoJSONEncoder,
-                                  **self.get_json_dumps_kwargs())
+                                  **self.get_json_dumps_kwargs()).encode(
+                                  u'utf-8')
         return HttpResponse(json_context,
                             content_type=self.get_content_type(),
                             status=status)
@@ -530,7 +567,7 @@ class AjaxResponseMixin(object):
         request_method = request.method.lower()
 
         if request.is_ajax() and request_method in self.http_method_names:
-            handler = getattr(self, '%s_ajax' % request_method,
+            handler = getattr(self, u"{0}_ajax".format(request_method),
                               self.http_method_not_allowed)
             self.request = request
             self.args = args
@@ -582,22 +619,26 @@ class JsonRequestResponseMixin(JSONResponseMixin):
             error_dict,
             cls=DjangoJSONEncoder,
             **self.get_json_dumps_kwargs()
-        )
+        ).encode(u'utf-8')
         return HttpResponseBadRequest(
             json_context, content_type=self.get_content_type())
 
     def get_request_json(self):
         try:
-            return json.loads(self.request.body)
+            return json.loads(self.request.body.decode(u'utf-8'))
         except ValueError:
             return None
 
     def dispatch(self, request, *args, **kwargs):
+        self.request = request
+        self.args = args
+        self.kwargs = kwargs
+
         self.request_json = self.get_request_json()
         if self.require_json and self.request_json is None:
             return self.render_bad_request_response()
-        return super(JsonRequestResponseMixin, self).dispatch(request,
-                                                              *args, **kwargs)
+        return super(JsonRequestResponseMixin, self).dispatch(
+           request, *args, **kwargs)
 
 
 class OrderableListMixin(object):
@@ -673,15 +714,25 @@ class CanonicalSlugDetailMixin(object):
     redirect to the url containing the canonical slug.
     """
     def dispatch(self, request, *args, **kwargs):
-        # Get the current object, url slug, and urlpattern name.
+        # Set up since we need to super() later instead of earlier.
+        self.request = request
+        self.args = args
+        self.kwargs = kwargs
+
+        # Get the current object, url slug, and
+        # urlpattern name (namespace aware).
         obj = self.get_object()
         slug = self.kwargs.get(self.slug_url_kwarg, None)
-        current_urlpattern = resolve(request.path_info).url_name
+        match = resolve(request.path_info)
+        url_parts = match.namespaces
+        url_parts.append(match.url_name)
+        current_urlpattern = ":".join(url_parts)
 
         # Figure out what the slug is supposed to be.
-        canonical_slug = self.get_canonical_slug()
-        if hasattr(obj, 'get_canonical_slug'):
+        if hasattr(obj, "get_canonical_slug"):
             canonical_slug = obj.get_canonical_slug()
+        else:
+            canonical_slug = self.get_canonical_slug()
 
         # If there's a discrepancy between the slug in the url and the
         # canonical slug, redirect to the canonical slug.
@@ -698,7 +749,7 @@ class CanonicalSlugDetailMixin(object):
         canonical.
 
         Alternatively, define the get_canonical_slug method on this view's
-        object class.
+        object class. In that case, this method will never be called.
         """
         return self.get_object().slug
 
