@@ -8,6 +8,7 @@ from ._access import (
     PermissionRequiredMixin,
     StaffuserRequiredMixin,
     SuperuserRequiredMixin,
+    ObjectOwnerRequiredMixin,
     UserPassesTestMixin
 )
 from ._ajax import (
