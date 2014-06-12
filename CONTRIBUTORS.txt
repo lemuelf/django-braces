@@ -22,6 +22,10 @@ Direct Contributors
 * Markus Zapke-Gründemann
 * Kamil Gałuszka
 * Danilo Bargen
+* Jon Bolt
+* Kit Sunde
+* Ben Cardy
+* Rag Sagar.V
 
 Other Contributors
 ==================

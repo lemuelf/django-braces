@@ -1,7 +1,10 @@
+from __future__ import absolute_import
+
 import codecs
 
 from django.contrib.auth.models import User
 from django.http import HttpResponse
+from django.utils.translation import ugettext_lazy as _
 from django.views.generic import (View, UpdateView, FormView, TemplateView,
                                   ListView, DetailView, CreateView)
 
@@ -9,6 +12,7 @@ from braces import views
 
 from .models import Article, CanonicalArticle
 from .forms import ArticleForm, FormWithUserKwarg
+from .helpers import SetJSONEncoder
 
 
 class OkView(View):
@@ -31,6 +35,22 @@ class OkView(View):
 class LoginRequiredView(views.LoginRequiredMixin, OkView):
     """
     A view for testing LoginRequiredMixin.
+    """
+
+
+class AnonymousRequiredView(views.AnonymousRequiredMixin, OkView):
+    """
+    A view for testing AnonymousRequiredMixin. Should accept
+    unauthenticated users and redirect authenticated users to the
+    authenticated_redirect_url set on the view.
+    """
+    authenticated_redirect_url = '/authenticated_view/'
+
+
+class AuthenticatedView(views.LoginRequiredMixin, OkView):
+    """
+    A view for testing AnonymousRequiredMixin. Should accept
+    authenticated users.
     """
 
 
@@ -57,6 +77,18 @@ class SimpleJsonView(views.JSONResponseMixin, View):
     """
     def get(self, request):
         object = {'username': request.user.username}
+        return self.render_json_response(object)
+
+
+class CustomJsonEncoderView(views.JSONResponseMixin, View):
+    """
+    A view for testing JSONResponseMixin's `json_encoder_class` attribute
+    with custom JSONEncoder class.
+    """
+    json_encoder_class = SetJSONEncoder
+
+    def get(self, request):
+        object = {'numbers': set([1, 2, 3])}
         return self.render_json_response(object)
 
 
@@ -102,8 +134,8 @@ class JsonBadRequestView(views.JsonRequestResponseMixin, View):
 
 class JsonCustomBadRequestView(views.JsonRequestResponseMixin, View):
     """
-    A view for testing JsonRequestResponseMixin's render_bad_request_response method
-    with a custom error message
+    A view for testing JsonRequestResponseMixin's
+    render_bad_request_response method with a custom error message
     """
     def post(self, request, *args, **kwargs):
         if not self.request_json:
@@ -174,6 +206,20 @@ class HeadlineView(views.SetHeadlineMixin, TemplateView):
     headline = "Test headline"
 
 
+class LazyHeadlineView(views.SetHeadlineMixin, TemplateView):
+    """
+    View for testing SetHeadlineMixin.
+    """
+    template_name = 'blank.html'
+    headline = _("Test Headline")
+
+
+class ContextView(views.StaticContextMixin, TemplateView):
+    """ View for testing StaticContextMixin. """
+    template_name = 'blank.html'
+    static_context = {'test': True}
+
+
 class DynamicHeadlineView(views.SetHeadlineMixin, TemplateView):
     """
     View for testing SetHeadlineMixin's get_headline() method.
@@ -237,6 +283,14 @@ class OverriddenCanonicalSlugDetailView(views.CanonicalSlugDetailMixin,
         return codecs.encode(self.get_object().slug, 'rot_13')
 
 
+class CanonicalSlugDetailCustomUrlKwargsView(views.CanonicalSlugDetailMixin,
+                                             DetailView):
+    model = Article
+    template_name = 'blank.html'
+    pk_url_kwarg = 'my_pk'
+    slug_url_kwarg = 'my_slug'
+
+
 class ModelCanonicalSlugDetailView(views.CanonicalSlugDetailMixin,
                                    DetailView):
     model = CanonicalArticle
@@ -245,8 +299,8 @@ class ModelCanonicalSlugDetailView(views.CanonicalSlugDetailMixin,
 
 class FormMessagesView(views.FormMessagesMixin, CreateView):
     form_class = ArticleForm
-    form_invalid_message = 'Invalid'
-    form_valid_message = 'Valid'
+    form_invalid_message = _('Invalid')
+    form_valid_message = _('Valid')
     model = Article
     success_url = '/form_messages/'
     template_name = 'form.html'
@@ -264,3 +318,8 @@ class UserPassesTestView(views.UserPassesTestMixin, OkView):
 
 class UserPassesTestNotImplementedView(views.UserPassesTestMixin, OkView):
     pass
+
+
+class AllVerbsView(views.AllVerbsMixin, View):
+    def all(self, request, *args, **kwargs):
+        return HttpResponse('All verbs return this!')

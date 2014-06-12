@@ -1,12 +1,18 @@
+from __future__ import absolute_import
+
 import mock
+
 from django import test
 from django.core.exceptions import ImproperlyConfigured
 from django.http import HttpResponse
+
 from braces.views import AjaxResponseMixin
+
 from .compat import force_text
 from .factories import ArticleFactory, UserFactory
 from .helpers import TestViewHelper
-from .views import SimpleJsonView, JsonRequestResponseView
+from .views import (SimpleJsonView, JsonRequestResponseView,
+                    CustomJsonEncoderView)
 from .compat import json
 
 
@@ -108,13 +114,13 @@ class TestJSONResponseMixin(TestViewHelper, test.TestCase):
         self.assertIn(a1.title, titles)
         self.assertIn(a2.title, titles)
 
-    def test_missing_content_type(self):
+    def test_bad_content_type(self):
         """
         ImproperlyConfigured exception should be raised if content_type
         attribute is not set correctly.
         """
         with self.assertRaises(ImproperlyConfigured):
-            self.dispatch_view(self.build_request(), content_type=None)
+            self.dispatch_view(self.build_request(), content_type=['a'])
 
     def test_pretty_json(self):
         """
@@ -130,6 +136,13 @@ class TestJSONResponseMixin(TestViewHelper, test.TestCase):
         pretty_json = json.loads(u'{0}'.format(pretty_content))
         self.assertEqual(normal_json, pretty_json)
         self.assertTrue(len(pretty_content) > len(normal_content))
+
+    def test_json_encoder_class_atrribute(self):
+        """
+        Tests setting custom `json_encoder_class` attribute.
+        """
+        data = json.loads(self.get_content(u'/simple_json_custom_encoder/'))
+        self.assertEqual({u'numbers': [1, 2, 3]}, data)
 
 
 class TestJsonRequestResponseMixin(TestViewHelper, test.TestCase):
@@ -149,7 +162,6 @@ class TestJsonRequestResponseMixin(TestViewHelper, test.TestCase):
         response_json = json.loads(response.content.decode(u'utf-8'))
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response_json, self.request_dict)
-
 
     def test_get_request_json_improperly_formatted(self):
         """

@@ -1,3 +1,5 @@
+from __future__ import absolute_import
+
 from . import views
 from .compat import patterns, include, url
 
@@ -6,6 +8,12 @@ urlpatterns = patterns(
     '',
     # LoginRequiredMixin tests
     url(r'^login_required/$', views.LoginRequiredView.as_view()),
+
+    # AnonymousRequiredView tests
+    url(r'^unauthenticated_view/$', views.AnonymousRequiredView.as_view(),
+        name='unauthenticated_view'),
+    url(r'^authenticated_view/$', views.AuthenticatedView.as_view(),
+        name='authenticated_view'),
 
     # AjaxResponseMixin tests
     url(r'^ajax_response/$', views.AjaxResponseView.as_view()),
@@ -29,6 +37,8 @@ urlpatterns = patterns(
         include('tests.urls_namespaced', namespace='some_namespace')),
     url(r'^article-canonical-override/(?P<pk>\d+)-(?P<slug>[-\w]+)/$',
         views.OverriddenCanonicalSlugDetailView.as_view()),
+    url(r'^article-canonical-custom-kwargs/(?P<my_pk>\d+)-(?P<my_slug>[-\w]+)/$',
+        views.CanonicalSlugDetailCustomUrlKwargsView.as_view()),
     url(r'^article-canonical-model/(?P<pk>\d+)-(?P<slug>[-\w]+)/$',
         views.ModelCanonicalSlugDetailView.as_view()),
 
@@ -37,7 +47,11 @@ urlpatterns = patterns(
 
     # SetHeadlineMixin tests
     url(r'^headline/$', views.HeadlineView.as_view(), name='headline'),
+    url(r'^headline/lazy/$', views.LazyHeadlineView.as_view()),
     url(r'^headline/(?P<s>[\w-]+)/$', views.DynamicHeadlineView.as_view()),
+
+    # ExtraContextMixin tests
+    url(r'^context/$', views.ContextView.as_view(), name='context'),
 
     # PermissionRequiredMixin tests
     url(r'^permission_required/$', views.PermissionRequiredView.as_view()),
@@ -66,6 +80,7 @@ urlpatterns = patterns(
 
     # JSONResponseMixin tests
     url(r'^simple_json/$', views.SimpleJsonView.as_view()),
+    url(r'^simple_json_custom_encoder/$', views.CustomJsonEncoderView.as_view()),
     url(r'^simple_json_400/$', views.SimpleJsonBadRequestView.as_view()),
     url(r'^article_list_json/$', views.ArticleListJsonView.as_view()),
 
@@ -76,6 +91,10 @@ urlpatterns = patterns(
 
     # FormMessagesMixin tests
     url(r'form_messages/$', views.FormMessagesView.as_view()),
+
+    # AllVerbsMixin tests
+    url(r'all_verbs/$', views.AllVerbsView.as_view()),
+    url(r'all_verbs_no_handler/$', views.AllVerbsView.as_view(all_handler=None)),
 )
 
 
